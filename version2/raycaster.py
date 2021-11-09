@@ -70,7 +70,7 @@ class Game:
         self.blocks = (tuple(zip(*np.where(self.level_matrix == 1))))
         # "for text in self.blocks:
         # ""   print(text)
-        self.projection_plane = 320/math.tan(math.radians(20))
+        self.projection_plane = 320 / math.tan(math.radians(FOV / 2))
         self.block_image = pg.Surface((BLOCK_SIZE, BLOCK_SIZE))
         self.block_image.fill(COLOURS["RED"])
         self.running = True
@@ -105,8 +105,10 @@ class Game:
         ray_array = self.player.ray_casting()
         # print (ray_array)
         self.left_slave.fill(COLOURS["OPAQUE"])
-        for ray in ray_array:
-            pg.draw.line(self.left_slave, COLOURS["BLUE"], self.player.position, (ray[0], ray[1]))
+        pg.draw.line(self.left_slave, COLOURS["RED"], self.player.position, self.player.position +  pg.math.Vector2(50,0).rotate(self.player.rotation))
+
+        #for ray in ray_array:
+        #    pg.draw.line(self.left_slave, COLOURS["BLUE"], self.player.position, (ray[0], ray[1]))
 
         for block in self.blocks:
             self.left_slave.blit(self.block_image, (block[0] * BLOCK_SIZE, block[1] * BLOCK_SIZE))
@@ -125,11 +127,12 @@ class Game:
         pg.draw.rect(self.right_slave, COLOURS["BLUE"], sky)
 
         for pos, line in enumerate(ray_array):
-            height = (640 - line[2])
+            height = math.ceil(BLOCK_SIZE / line[2] * self.projection_plane)
             colour = COLOURS["YELLOW"].copy()
-            colour *= abs(line[2] - 640) / 640
+            colour *= (abs(line[2] - 640) / 640) * 0.8
+            #print(height)
 
-            column = pg.Rect((pos, 640 - height), (1, height))
+            column = pg.Rect((pos, 320 - height/2), (1, height))
             pg.draw.rect(self.right_slave, colour, column)
 
         self.master_screen.blit(self.right_slave, (640, 0))
@@ -144,6 +147,7 @@ class Sprites:
             pg.sprite.Sprite.__init__(self, self.all_sprites)
             self.image = pg.Surface((25, 25))
             self.image.fill(COLOURS["GREEN"])
+
             self.position = pg.math.Vector2(300, 300)
             self.rect = self.image.get_rect()
             self.rect.center = self.position
@@ -159,6 +163,8 @@ class Sprites:
             keys = pg.key.get_pressed()
             if keys[pg.K_UP]: self.acceleration.x += 1
             if keys[pg.K_DOWN]: self.acceleration.x += -0.5
+            if keys[pg.K_z] : self.acceleration.y += -0.5
+            if keys[pg.K_x]: self.acceleration.y += 0.5
             if keys[pg.K_LEFT]: rot += -1
             if keys[pg.K_RIGHT]: rot += 1
 
@@ -168,6 +174,8 @@ class Sprites:
             self.position += self.acceleration.rotate(self.rotation)
 
             self.rect.center = self.position
+
+
 
         def ray_casting(self):
             result_array = np.zeros(self.number_of_rays, dtype="f,f,f")
@@ -262,28 +270,31 @@ class Sprites:
                     if x_ray <= y_ray:
                         # print("X-ray is smaller than y-ray (or equal)")
                         if not x_at_end:
-                            x_ray, (current_position_x_x, current_position_x_y), x_at_end = traversing_x(x_ray, x_at_end)
+                            x_ray, (current_position_x_x, current_position_x_y), x_at_end = traversing_x(x_ray,
+                                                                                                         x_at_end)
                             # continue
 
                         else:
                             # print("but because x is at end, y is called ")
-                            y_ray, (current_position_y_x, current_position_y_y), y_at_end = traversing_y(y_ray, y_at_end)
+                            y_ray, (current_position_y_x, current_position_y_y), y_at_end = traversing_y(y_ray,
+                                                                                                         y_at_end)
                             # continue
 
                     else:
                         # print("y-ray is smaller than x-ray")
                         if not y_at_end:
-                            y_ray, (current_position_y_x, current_position_y_y), y_at_end = traversing_y(y_ray, y_at_end)
+                            y_ray, (current_position_y_x, current_position_y_y), y_at_end = traversing_y(y_ray,
+                                                                                                         y_at_end)
                             # continue
 
                         else:
-                            x_ray, (current_position_x_x, current_position_x_y), x_at_end = traversing_x(x_ray, x_at_end)
+                            x_ray, (current_position_x_x, current_position_x_y), x_at_end = traversing_x(x_ray,
+                                                                                                         x_at_end)
 
-
-                #current_position_x_x = position.x + (x_ray * x)
-                #current_position_x_y = position.y + (x_ray * y)
-                #current_position_y_x = position.x + (y_ray * x)
-                #current_position_y_y = position.y + (y_ray * y)
+                # current_position_x_x = position.x + (x_ray * x)
+                # current_position_x_y = position.y + (x_ray * y)
+                # current_position_y_x = position.x + (y_ray * x)
+                # current_position_y_y = position.y + (y_ray * y)
                 x_ray *= fisheye
                 y_ray *= fisheye
 
