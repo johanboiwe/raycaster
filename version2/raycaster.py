@@ -108,9 +108,10 @@ class Game:
         ray_array = self.player.ray_casting()
         # print (ray_array)
         self.left_slave.fill(COLOURS["OPAQUE"])
-        pg.draw.line(self.left_slave, COLOURS["RED"], self.player.position, self.player.position +  pg.math.Vector2(50,0).rotate(self.player.rotation))
+        pg.draw.line(self.left_slave, COLOURS["RED"], self.player.position,
+                     self.player.position + pg.math.Vector2(50, 0).rotate(self.player.rotation))
 
-        #for ray in ray_array:
+        # for ray in ray_array:
         #    pg.draw.line(self.left_slave, COLOURS["BLUE"], self.player.position, (ray[0], ray[1]))
 
         for block in self.blocks:
@@ -133,9 +134,9 @@ class Game:
             height = math.ceil(BLOCK_SIZE / line[2] * self.projection_plane)
             colour = COLOURS["YELLOW"].copy()
             colour *= (abs(line[2] - 640) / 640) * 0.8
-            #print(height)
+            # print(height)
 
-            column = pg.Rect((pos, 320 - height/2), (1, height))
+            column = pg.Rect((pos, 320 - height / 2), (1, height))
             pg.draw.rect(self.right_slave, colour, column)
 
         self.master_screen.blit(self.right_slave, (640, 0))
@@ -166,7 +167,7 @@ class Sprites:
             keys = pg.key.get_pressed()
             if keys[pg.K_UP]: self.acceleration.x += 1
             if keys[pg.K_DOWN]: self.acceleration.x += -0.5
-            if keys[pg.K_z] : self.acceleration.y += -0.5
+            if keys[pg.K_z]: self.acceleration.y += -0.5
             if keys[pg.K_x]: self.acceleration.y += 0.5
             if keys[pg.K_LEFT]: rot += -1
             if keys[pg.K_RIGHT]: rot += 1
@@ -178,16 +179,15 @@ class Sprites:
 
             self.rect.center = self.position
 
-
         def ray_casting(self):
-            self.ray_casting_multicore()
+
+            return self.ray_casting_multicore()
             result_array = np.zeros(self.number_of_rays, dtype="f,f,f")
             level_matrix = self.game.level_matrix
             position = self.position
             self.angle_array = np.linspace(-20, 20, self.number_of_rays)
             self.angle_array += self.rotation
             self.angle_array %= 360
-
 
             def traversing_x(ray, end):
                 # print("X value is", x)
@@ -309,19 +309,6 @@ class Sprites:
             return result_array
 
         def ray_casting_multicore(self):
-            class Ray:
-                def __init__(self, queue, pro, angle_array, position, rotation):
-                    self.queue = queue
-                    self.pro = pro
-                    self.angle_array = angle_array.flatten()
-                    self.rotation = rotation
-                    self.position = position
-                    self.result_array = np.zeros(len(angle_array), dtype="f,f,f")
-                    for pos, angle in enumerate(self.angle_array):
-                        self.cast_ray(pos,angle)
-
-                def cast_ray(self, pos, angle):
-                    pass
 
             processes = 4
 
@@ -329,12 +316,44 @@ class Sprites:
             angle_array += self.rotation
             angle_array %= 360
             queue = Queue()
-            angle_array = angle_array.reshape((4,160))
+            angle_array = angle_array.reshape((4, 160))
             process_list = list()
             for pro in range(0, processes):
-                p = Process(target= Ray, args= (queue,pro, angle_array[pro], self.position, self.rotation))
+                p = Process(target=Ray, args=(queue, pro, angle_array[pro], self.position, self.rotation))
                 p.start()
                 process_list.append(p)
-                input()
 
 
+class Ray:
+    def __init__(self, queue, pro, angle_array, position, rotation):
+        self.queue = queue
+        self.pro = pro
+        self.angle_array = angle_array.flatten()
+        self.rotation = rotation
+        self.position = position
+        self.result_array = np.zeros(len(angle_array), dtype="f,f,f")
+        for pos, angle in enumerate(self.angle_array):
+            self.cast_ray(pos, angle, rotation, position.x, position.y)
+
+    @staticmethod
+    @jit()
+    def cast_ray(iteration, angle, rotation, position_x, position_y):
+        radians = math.radians(angle + 0.01)
+        fisheye = math.cos(radians - math.radians(rotation))
+        x = math.cos(radians)
+        y = math.sin(radians)
+        #sx = lambda length=1: (length * (math.sqrt((1 ** 2) + ((y / x) ** 2))))
+        #sy = lambda length=1: (length * (math.sqrt((1 ** 2) + ((x / y) ** 2))))
+        x_ray = 0
+        y_ray = 0
+        x_at_end = False
+        y_at_end = False
+        current_position_x_x = position_x
+        current_position_x_y = position_y
+        current_position_y_x = position_x
+        current_position_y_y = position_y
+
+
+if __name__ == '__main__':
+    print("This script is not be run independently")
+    sys.exit()
