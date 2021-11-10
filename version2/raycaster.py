@@ -182,6 +182,7 @@ class Sprites:
         def ray_casting(self):
 
             return self.ray_casting_multicore()
+
             result_array = np.zeros(self.number_of_rays, dtype="f,f,f")
             level_matrix = self.game.level_matrix
             position = self.position
@@ -319,13 +320,18 @@ class Sprites:
             angle_array = angle_array.reshape((4, 160))
             process_list = list()
             for pro in range(0, processes):
-                p = Process(target=Ray, args=(queue, pro, angle_array[pro], self.position, self.rotation))
+                p = Process(target=Ray, args=(queue, pro, angle_array[pro], self.position, self.rotation, self.game.level_matrix, self.game.level_size))
                 p.start()
                 process_list.append(p)
+            for q in range(0,processes):
+                print(queue.get())
+            input()
 
 
 class Ray:
-    def __init__(self, queue, pro, angle_array, position, rotation):
+    def __init__(self, queue, pro, angle_array, position, rotation, level_matrix, level_size):
+        self.level_size = level_size
+        self.level_matrix = level_matrix
         self.queue = queue
         self.pro = pro
         self.angle_array = angle_array.flatten()
@@ -333,15 +339,20 @@ class Ray:
         self.position = position
         self.result_array = np.zeros(len(angle_array), dtype="f,f,f")
         for pos, angle in enumerate(self.angle_array):
-            self.cast_ray(pos, angle, rotation, position.x, position.y)
+            self.result_array[pos] = self.cast_ray(pos, angle, rotation, float(position.x), float(position.y), level_matrix, level_size)
+        queue.put(self.result_array)
 
     @staticmethod
     @jit()
-    def cast_ray(iteration, angle, rotation, position_x, position_y):
+    def cast_ray(iteration, angle, rotation, position_x, position_y, level_matrix, level_size):
         radians = math.radians(angle + 0.01)
         fisheye = math.cos(radians - math.radians(rotation))
         x = math.cos(radians)
         y = math.sin(radians)
+        is_x_positive = True
+        is_y_positive = True
+        if x<0: is_x_positive = False
+        if y<0: is_y_positive = False
         #sx = lambda length=1: (length * (math.sqrt((1 ** 2) + ((y / x) ** 2))))
         #sy = lambda length=1: (length * (math.sqrt((1 ** 2) + ((x / y) ** 2))))
         x_ray = 0
@@ -352,6 +363,130 @@ class Ray:
         current_position_x_y = position_y
         current_position_y_x = position_x
         current_position_y_y = position_y
+
+        # getting into blocks
+
+        if is_x_positive:
+            x_ray = (abs(position_x - (int(position_x / BLOCK_SIZE) * BLOCK_SIZE + BLOCK_SIZE))) * (math.sqrt((1 ** 2) + ((y / x) ** 2)))
+        else:
+            x_ray = (position_x - (int(position_x/ BLOCK_SIZE) * BLOCK_SIZE - 0)) * (math.sqrt((1 ** 2) + ((y / x) ** 2)))
+        if is_y_positive:
+            y_ray = (abs(position_y - (int(position_y / BLOCK_SIZE) * BLOCK_SIZE + BLOCK_SIZE))) * math.sqrt((1 ** 2) + ((x / y) ** 2))
+        else:
+            y_ray = (int(position_y / BLOCK_SIZE) * BLOCK_SIZE - 0) * math.sqrt((1 ** 2) + ((x / y) ** 2))
+
+        #travsering
+
+        while not x_at_end or not y_at_end:
+            if x_ray <= y_ray:
+                # print("X-ray is smaller than y-ray (or equal)")
+                if not x_at_end:
+                    current_position_x_x = (current_position_x_x + (x_ray * x))
+                    current_position_x_y = (current_position_x_y + (x_ray * y))
+                    current_position_x_x = round(current_position_x_x, 3)
+                    current_position_x_y = round(current_position_x_y, 3)
+        
+                    block_coord_x = math.trunc(current_position_x_x/BLOCK_SIZE)
+                    if not is_x_positive: block_coord_x -= 1
+                    block_coord_y = math.trunc(current_position_x_y/BLOCK_SIZE)
+    
+                    if block_coord_x < 0 or block_coord_y < 0:
+                        x_at_end = True
+                        continue
+                        
+                    if block_coord_x >= level_size[0] or block_coord_y >= level_size[1]:
+                        x_at_end = True
+                        continue
+
+                    if level_matrix[block_coord_x,block_coord_y]:
+                        # print("Hit in x, position:", (position_x,position_y), "IE:", block_coordinates)
+                        x_at_end = True
+                        continue
+                    # print("No hit in x, position:", (position_x,position_y), "IE:", block_coordinates)
+
+                    x_ray += BLOCK_SIZE * (math.sqrt((1 ** 2) + ((y / x) ** 2)))
+                    continue
+
+                else:
+                    # print("but because x is at end, y is called ")
+                    current_position_y_x = (current_position_y_x + (y_ray * x))
+                    current_position_y_y = (current_position_y_y + (y_ray * y))
+                    current_position_y_x = round(current_position_y_x, 3)
+                    current_position_y_y = round(current_position_y_y, 3)
+
+                    block_coord_x = math.trunc(current_position_y_x / BLOCK_SIZE)
+                    block_coord_y = math.trunc(current_position_y_y / BLOCK_SIZE)
+                    if not is_y_positive: block_coord_y -= 1
+                    if block_coord_x < 0 or block_coord_y < 0:
+                        y_at_end = True
+                        continue
+
+                    if block_coord_x >= level_size[0] or block_coord_y >= level_size[1]:
+                        y_at_end = True
+                        continue
+
+                    if level_matrix[block_coord_x, block_coord_y]:
+                        y_at_end = True
+                        continue
+                    y_ray += BLOCK_SIZE * (math.sqrt((1 ** 2) + ((x / y) ** 2)))
+                    continue
+            else:
+                # print("y-ray is smaller than x-ray")
+                if not y_at_end:
+                    current_position_y_x = (current_position_y_x + (y_ray * x))
+                    current_position_y_y = (current_position_y_y + (y_ray * y))
+                    current_position_y_x = round(current_position_y_x, 3)
+                    current_position_y_y = round(current_position_y_y, 3)
+
+                    block_coord_x = math.trunc(current_position_y_x / BLOCK_SIZE)
+                    block_coord_y = math.trunc(current_position_y_y / BLOCK_SIZE)
+                    if not is_y_positive: block_coord_y -= 1
+                    if block_coord_x < 0 or block_coord_y < 0:
+                        y_at_end = True
+                        continue
+
+                    if block_coord_x >= level_size[0] or block_coord_y >= level_size[1]:
+                        y_at_end = True
+                        continue
+
+                    if level_matrix[block_coord_x, block_coord_y]:
+                        y_at_end = True
+                        continue
+                    y_ray += BLOCK_SIZE * (math.sqrt((1 ** 2) + ((x / y) ** 2)))
+
+                else:
+                    current_position_x_x = (current_position_x_x + (x_ray * x))
+                    current_position_x_y = (current_position_x_y + (x_ray * y))
+                    current_position_x_x = round(current_position_x_x, 3)
+                    current_position_x_y = round(current_position_x_y, 3)
+
+                    block_coord_x = math.trunc(current_position_x_x / BLOCK_SIZE)
+                    if not is_x_positive: block_coord_x -= 1
+                    block_coord_y = math.trunc(current_position_x_y / BLOCK_SIZE)
+
+                    if block_coord_x < 0 or block_coord_y < 0:
+                        x_at_end = True
+                        continue
+
+                    if block_coord_x >= level_size[0] or block_coord_y >= level_size[1]:
+                        x_at_end = True
+                        continue
+
+                    if level_matrix[block_coord_x, block_coord_y]:
+                        # print("Hit in x, position:", (position_x,position_y), "IE:", block_coordinates)
+                        x_at_end = True
+                        continue
+                    # print("No hit in x, position:", (position_x,position_y), "IE:", block_coordinates)
+
+                    x_ray += BLOCK_SIZE * (math.sqrt((1 ** 2) + ((y / x) ** 2)))
+                    continue
+
+        x_ray *= fisheye
+        y_ray *= fisheye
+        final_result = (current_position_x_x, current_position_x_y, x_ray)
+        if x_ray > y_ray: final_result = (current_position_y_x, current_position_y_y, y_ray)
+        return final_result
+
 
 
 if __name__ == '__main__':
