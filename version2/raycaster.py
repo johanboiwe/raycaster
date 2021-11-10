@@ -1,6 +1,9 @@
 import pygame as pg
 import numpy as np
 import math
+import sys
+from numba import jit, njit
+from multiprocessing import *
 
 FOV = 40
 BLOCK_SIZE = 64
@@ -176,14 +179,15 @@ class Sprites:
             self.rect.center = self.position
 
 
-
         def ray_casting(self):
+            self.ray_casting_multicore()
             result_array = np.zeros(self.number_of_rays, dtype="f,f,f")
             level_matrix = self.game.level_matrix
             position = self.position
             self.angle_array = np.linspace(-20, 20, self.number_of_rays)
             self.angle_array += self.rotation
             self.angle_array %= 360
+
 
             def traversing_x(ray, end):
                 # print("X value is", x)
@@ -303,3 +307,34 @@ class Sprites:
                 result_array[pos] = final_result
 
             return result_array
+
+        def ray_casting_multicore(self):
+            class Ray:
+                def __init__(self, queue, pro, angle_array, position, rotation):
+                    self.queue = queue
+                    self.pro = pro
+                    self.angle_array = angle_array.flatten()
+                    self.rotation = rotation
+                    self.position = position
+                    self.result_array = np.zeros(len(angle_array), dtype="f,f,f")
+                    for pos, angle in enumerate(self.angle_array):
+                        self.cast_ray(pos,angle)
+
+                def cast_ray(self, pos, angle):
+                    pass
+
+            processes = 4
+
+            angle_array = np.linspace(-20, 20, self.number_of_rays)
+            angle_array += self.rotation
+            angle_array %= 360
+            queue = Queue()
+            angle_array = angle_array.reshape((4,160))
+            process_list = list()
+            for pro in range(0, processes):
+                p = Process(target= Ray, args= (queue,pro, angle_array[pro], self.position, self.rotation))
+                p.start()
+                process_list.append(p)
+                input()
+
+
